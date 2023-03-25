@@ -1,0 +1,8 @@
+[gd_scene load_steps=2 format=3 uid="uid://c4373iviuy8gy"]
+
+[ext_resource type="Script" path="res://helpers/camera.gd" id="1_0pxya"]
+
+[node name="Camera" type="Camera2D"]
+texture_filter = 1
+zoom = Vector2(7, 7)
+script = ExtResource("1_0pxya")

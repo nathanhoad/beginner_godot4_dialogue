@@ -1,0 +1,6 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Godot 4+ specific ignores
+.godot/

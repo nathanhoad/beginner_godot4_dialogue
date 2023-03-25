@@ -1,0 +1,21 @@
+[gd_scene load_steps=3 format=3 uid="uid://byqyiy823ab7s"]
+
+[ext_resource type="Texture2D" uid="uid://dkbso2kiy26dc" path="res://world/apple_tree.png" id="1_xdk72"]
+
+[sub_resource type="CapsuleShape2D" id="CapsuleShape2D_q5aj2"]
+radius = 12.0
+height = 44.0
+
+[node name="AppleTree" type="StaticBody2D"]
+collision_mask = 0
+
+[node name="Sprite2D" type="Sprite2D" parent="."]
+texture_filter = 1
+position = Vector2(0, -28)
+texture = ExtResource("1_xdk72")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+visible = false
+position = Vector2(0, -12)
+rotation = 1.5708
+shape = SubResource("CapsuleShape2D_q5aj2")

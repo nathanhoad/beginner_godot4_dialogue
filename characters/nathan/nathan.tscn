@@ -1,0 +1,20 @@
+[gd_scene load_steps=3 format=3 uid="uid://bnl1bl0a2235p"]
+
+[ext_resource type="Texture2D" uid="uid://budna3cjatb0b" path="res://characters/nathan/nathan.png" id="1_5yyb1"]
+
+[sub_resource type="CapsuleShape2D" id="CapsuleShape2D_u2fii"]
+radius = 5.0
+height = 14.0
+
+[node name="Nathan" type="StaticBody2D"]
+collision_mask = 0
+
+[node name="Nathan" type="Sprite2D" parent="."]
+texture_filter = 1
+position = Vector2(0, -8)
+texture = ExtResource("1_5yyb1")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+visible = false
+rotation = 1.5708
+shape = SubResource("CapsuleShape2D_u2fii")
