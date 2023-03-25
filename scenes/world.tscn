@@ -1,11 +1,13 @@
-[gd_scene load_steps=10 format=3 uid="uid://b1au01m7lrbfp"]
+[gd_scene load_steps=14 format=3 uid="uid://b1au01m7lrbfp"]
 
 [ext_resource type="Texture2D" uid="uid://bxngxqv2vonco" path="res://world/tiles.png" id="1_gv7bj"]
 [ext_resource type="PackedScene" uid="uid://c4373iviuy8gy" path="res://helpers/camera.tscn" id="1_wd0fv"]
 [ext_resource type="PackedScene" uid="uid://dovx8ojro1870" path="res://characters/coco/coco.tscn" id="2_pnuuh"]
 [ext_resource type="PackedScene" uid="uid://044opjcmk7ol" path="res://world/tree.tscn" id="3_mrach"]
 [ext_resource type="PackedScene" uid="uid://byqyiy823ab7s" path="res://world/apple_tree.tscn" id="5_h6ns3"]
+[ext_resource type="PackedScene" uid="uid://p445hgyh7lcy" path="res://helpers/actionable.tscn" id="6_h5iv0"]
 [ext_resource type="PackedScene" uid="uid://bnl1bl0a2235p" path="res://characters/nathan/nathan.tscn" id="6_ilwpu"]
+[ext_resource type="Resource" uid="uid://b426p4338gqma" path="res://dialogue/main.dialogue" id="7_j61ni"]
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_4af00"]
 texture = ExtResource("1_gv7bj")
@@ -29,6 +31,12 @@ scenes/1/scene = ExtResource("3_mrach")
 [sub_resource type="TileSet" id="TileSet_4a415"]
 sources/0 = SubResource("TileSetAtlasSource_4af00")
 sources/1 = SubResource("TileSetScenesCollectionSource_8gbf3")
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_w48o2"]
+radius = 8.0
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_fgysu"]
+radius = 14.0
 
 [node name="World" type="Node2D"]
 y_sort_enabled = true
@@ -57,5 +65,19 @@ position = Vector2(320, 152)
 [node name="Nathan" parent="." instance=ExtResource("6_ilwpu")]
 position = Vector2(360, 120)
 
+[node name="Actionable" parent="Nathan" instance=ExtResource("6_h5iv0")]
+dialogue_resource = ExtResource("7_j61ni")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Nathan/Actionable"]
+shape = SubResource("CircleShape2D_w48o2")
+
 [node name="AppleTree" parent="." instance=ExtResource("5_h6ns3")]
 position = Vector2(184, 88)
+
+[node name="Actionable" parent="AppleTree" instance=ExtResource("6_h5iv0")]
+dialogue_resource = ExtResource("7_j61ni")
+dialogue_start = "pick_apple"
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="AppleTree/Actionable"]
+position = Vector2(0, -7)
+shape = SubResource("CircleShape2D_fgysu")

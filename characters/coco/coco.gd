@@ -5,6 +5,7 @@ const SPEED = 50
 
 
 @onready var animation_tree: AnimationTree = $AnimationTree
+@onready var actionable_finder: Area2D = $Direction/ActionableFinder
 
 var input_vector: Vector2 = Vector2.ZERO
 
@@ -14,6 +15,12 @@ func _ready() -> void:
 
 
 func _unhandled_input(_event: InputEvent) -> void:
+	if Input.is_action_just_pressed("ui_accept"):
+		var actionables = actionable_finder.get_overlapping_areas()
+		if actionables.size() > 0:
+			actionables[0].action()
+			return
+	
 	var x_axis: float = Input.get_axis("ui_left", "ui_right")
 	var y_axis: float = Input.get_axis("ui_up", "ui_down")
 	if x_axis:

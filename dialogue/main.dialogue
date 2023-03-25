@@ -1,0 +1,27 @@
+~ start
+
+Nathan: Hi Coco.
+if apple_status == "has":
+	Coco: I have an apple.
+	- Give to Nathan
+		set apple_status = "gave"
+		Coco: Here you go.
+		Nathan: Thanks.
+	- Keep it
+		Coco: But it's mine.
+		Nathan: Fair enough.
+elif apple_status == "gave":
+	Nathan: Thanks again for the apple.
+else:
+	Nathan: I sure wish I had an apple. Apparently there's an apple tree around here somewhere.
+
+=> END
+
+
+~ pick_apple
+
+Coco: It's an apple tree.
+Coco: I'll just take one.
+set apple_status = "has"
+
+=> END
