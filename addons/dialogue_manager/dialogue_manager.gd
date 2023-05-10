@@ -29,6 +29,9 @@ enum TranslationSource {
 # The list of globals that dialogue can query
 var game_states: Array = []
 
+# Allow dialogue to call singletons
+var include_singletons: bool = true
+
 # Manage translation behaviour
 var translation_source: TranslationSource = TranslationSource.Guess
 
@@ -148,6 +151,9 @@ func show_example_dialogue_balloon(resource: DialogueResource, title: String = "
 
 
 func _bridge_get_next_dialogue_line(resource: DialogueResource, key: String, extra_game_states: Array = []) -> void:
+	# dotnet needs at least one await tick of the signal gets called too quickly
+	await get_tree().process_frame
+	
 	var line = await get_next_dialogue_line(resource, key, extra_game_states)
 	bridge_get_next_dialogue_line_completed.emit(line)
 
@@ -425,6 +431,9 @@ func get_state_value(property: String, extra_game_states: Array):
 			var result = expression.execute([], state, false)
 			if not expression.has_execute_failed():
 				return result
+	
+	if include_singletons and Engine.has_singleton(property):
+		return Engine.get_singleton(property)
 
 	assert(false, "\"{property}\" is not a property on any game states ({states}).".format({ property = property, states = str(get_game_states(extra_game_states)) }))
 
@@ -436,7 +445,7 @@ func set_state_value(property: String, value, extra_game_states: Array) -> void:
 			if state.has(property):
 				state[property] = value
 				return
-		elif has_property(state, property):
+		elif thing_has_property(state, property):
 			state.set(property, value)
 			return
 
@@ -501,7 +510,7 @@ func resolve(tokens: Array, extra_game_states: Array):
 					tokens.remove_at(i)
 					tokens.remove_at(i-1)
 					i -= 2
-				elif caller.value.has_method(function_name):
+				elif thing_has_method(caller.value, function_name, args):
 					caller["type"] = "value"
 					caller["value"] = await caller.value.callv(function_name, args)
 					tokens.remove_at(i)
@@ -540,13 +549,19 @@ func resolve(tokens: Array, extra_game_states: Array):
 								token["type"] = "value"
 								token["value"] = state.size()
 								found = true
-					elif state.has_method(function_name):
+					elif thing_has_method(state, function_name, args):
 						token["type"] = "value"
 						token["value"] = await state.callv(function_name, args)
 						found = true
+					
+					if found:
+						break
 
 				if not found:
-					assert(false, "\"{method}\" is not a method on any game states ({states})".format({ method = function_name, states = str(get_game_states(extra_game_states)) }))
+					assert(false, "\"{method}\" is not a method on any game states ({states})".format({ 
+						method = args[0] if function_name in ["call", "call_deferred"] else function_name, 
+						states = str(get_game_states(extra_game_states)) 
+					}))
 
 		elif token.type == DialogueConstants.TOKEN_DICTIONARY_REFERENCE:
 			var value
@@ -877,8 +892,15 @@ func is_valid(line: DialogueLine) -> bool:
 	return true
 
 
+func thing_has_method(thing: Object, method: String, args: Array) -> bool:
+	if method in ["call", "call_deferred"]:
+		return thing.has_method(args[0])
+	else:
+		return thing.has_method(method)
+	
+
 # Check if a given property exists
-func has_property(thing: Object, name: String) -> bool:
+func thing_has_property(thing: Object, property: String) -> bool:
 	if thing == null:
 		return false
 
@@ -886,7 +908,7 @@ func has_property(thing: Object, name: String) -> bool:
 		if _node_properties.has(p.name):
 			# Ignore any properties on the base Node
 			continue
-		if p.name == name:
+		if p.name == property:
 			return true
 
 	return false

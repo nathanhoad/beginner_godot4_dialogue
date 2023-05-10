@@ -13,7 +13,7 @@ signal finished_typing()
 @export var seconds_per_step: float = 0.02
 
 ## Automatically have a brief pause when these characters are encountered
-@export var pause_at_characters: String = "."
+@export var pause_at_characters: String = ".?!"
 
 
 var dialogue_line: DialogueLine:
@@ -59,7 +59,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		visible_characters = get_total_character_count()
 		self.is_typing = false
 		finished_typing.emit()
-		
+
 
 # Start typing out the text
 func type_out() -> void:
@@ -67,10 +67,10 @@ func type_out() -> void:
 	visible_characters = 0
 	self.is_typing = true
 	waiting_seconds = 0
-	
+
 	# Text isn't calculated until the next frame
 	await get_tree().process_frame
-	
+
 	if get_total_character_count() == 0:
 		self.is_typing = false
 	elif seconds_per_step == 0:
@@ -85,25 +85,29 @@ func type_out() -> void:
 func type_next(delta: float, seconds_needed: float) -> void:
 	if visible_characters == get_total_character_count():
 		return
-	
+
 	if last_mutation_index != visible_characters:
 		last_mutation_index = visible_characters
 		dialogue_line.mutate_inline_mutations(visible_characters)
-	
+
 	var additional_waiting_seconds: float = dialogue_line.get_pause(visible_characters)
-	if visible_characters > 0 and text[visible_characters -1] in pause_at_characters.split():
-		additional_waiting_seconds += seconds_per_step * 10
-	
+
+	# Pause on characters like "."
+	if visible_characters > 0 and get_parsed_text()[visible_characters - 1] in pause_at_characters.split():
+		additional_waiting_seconds += seconds_per_step * 15
+
+	# Pause at literal [wait] directives
 	if last_wait_index != visible_characters and additional_waiting_seconds > 0:
 		last_wait_index = visible_characters
 		waiting_seconds += additional_waiting_seconds
 		paused_typing.emit(dialogue_line.get_pause(visible_characters))
 	else:
 		visible_characters += 1
+		if visible_characters <= get_total_character_count():
+			spoke.emit(get_parsed_text()[visible_characters - 1], visible_characters - 1, dialogue_line.get_speed(visible_characters))
+		# See if there's time to type out some more in this frame
 		seconds_needed += seconds_per_step * (1.0 / dialogue_line.get_speed(visible_characters))
 		if seconds_needed > delta:
 			waiting_seconds += seconds_needed
-			if visible_characters < get_total_character_count():
-				spoke.emit(text[visible_characters - 1], visible_characters - 1, dialogue_line.get_speed(visible_characters))
 		else:
 			type_next(delta, seconds_needed)

@@ -105,6 +105,9 @@ msgstr "Import line changes from CSV..."
 msgid "confirm_close"
 msgstr "Save changes to '{path}'?"
 
+msgid "confirm_close.save"
+msgstr "Save changes"
+
 msgid "confirm_close.discard"
 msgstr "Discard"
 
@@ -165,7 +168,7 @@ msgstr "If an autoload is enabled here you can refer to its properties and metho
 msgid "settings.states_hint"
 msgstr "ie. Instead of \"SomeState.some_property\" you could just use \"some_property\""
 
-msgid "search.n_of_n"
+msgid "n_of_n"
 msgstr "{index} of {total}"
 
 msgid "search.previous"
@@ -194,6 +197,9 @@ msgstr "Filter files"
 
 msgid "titles_list.filter"
 msgstr "Filter titles"
+
+msgid "errors.line_and_message"
+msgstr "Error at {line}, {column}: {message}"
 
 msgid "errors_in_script"
 msgstr "You have errors in your script. Fix them and then try again."
@@ -237,8 +243,8 @@ msgstr "That title has no content. Maybe change this to a \"=> END\"."
 msgid "errors.invalid_expression"
 msgstr "Expression is invalid."
 
-msgid "errors.invalid_expression_for_character"
-msgstr "The expression used for a character name is invalid."
+msgid "errors.unexpected_condition"
+msgstr "Unexpected condition."
 
 msgid "errors.duplicate_id"
 msgstr "This ID is already on another line."

@@ -95,6 +95,9 @@ msgstr ""
 msgid "confirm_close"
 msgstr ""
 
+msgid "confirm_close.save"
+msgstr ""
+
 msgid "confirm_close.discard"
 msgstr ""
 
@@ -155,7 +158,7 @@ msgstr ""
 msgid "settings.states_hint"
 msgstr ""
 
-msgid "search.n_of_n"
+msgid "n_of_n"
 msgstr ""
 
 msgid "search.previous"
@@ -183,6 +186,9 @@ msgid "files_list.filter"
 msgstr ""
 
 msgid "titles_list.filter"
+msgstr ""
+
+msgid "errors.line_and_message"
 msgstr ""
 
 msgid "errors_in_script"
@@ -227,7 +233,7 @@ msgstr ""
 msgid "errors.invalid_expression"
 msgstr ""
 
-msgid "errors.invalid_expression_for_character"
+msgid "errors.unexpected_condition"
 msgstr ""
 
 msgid "errors.duplicate_id"
