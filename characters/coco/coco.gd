@@ -21,7 +21,7 @@ func _unhandled_input(_event: InputEvent) -> void:
 			actionables[0].action()
 			input_vector = Vector2.ZERO
 			return
-	
+
 	var x_axis: float = Input.get_axis("ui_left", "ui_right")
 	var y_axis: float = Input.get_axis("ui_up", "ui_down")
 	if x_axis:
@@ -37,9 +37,9 @@ func _physics_process(_delta: float) -> void:
 		velocity = input_vector * SPEED
 	else:
 		velocity = velocity.move_toward(Vector2.ZERO, SPEED)
-	
+
 	move_and_slide()
-	
+
 	if velocity.length() > 0:
 		animation_tree.set("parameters/idle/blend_position", velocity)
 		animation_tree.set("parameters/walk/blend_position", velocity)
