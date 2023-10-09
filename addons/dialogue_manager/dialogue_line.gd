@@ -2,8 +2,11 @@
 class_name DialogueLine extends RefCounted
 
 
-const _DialogueConstants = preload("res://addons/dialogue_manager/constants.gd")
+const _DialogueConstants = preload("./constants.gd")
 
+
+## The ID of this line
+var id: String
 
 ## The internal type of this dialogue object. One of [code]TYPE_DIALOGUE[/code] or [code]TYPE_MUTATION[/code]
 var type: String = _DialogueConstants.TYPE_DIALOGUE
@@ -44,6 +47,9 @@ var extra_game_states: Array = []
 ## How long to show this line before advancing to the next. Either a float (of seconds), [code]"auto"[/code], or [code]null[/code].
 var time = null
 
+## Any #tags that were included in the line
+var tags: PackedStringArray = []
+
 ## The mutation details if this is a mutation line (where [code]type == TYPE_MUTATION[/code]).
 var mutation: Dictionary = {}
 
@@ -53,6 +59,7 @@ var conditions: Dictionary = {}
 
 func _init(data: Dictionary = {}) -> void:
 	if data.size() > 0:
+		id = data.id
 		next_id = data.next_id
 		type = data.type
 		extra_game_states = data.extra_game_states
@@ -69,6 +76,7 @@ func _init(data: Dictionary = {}) -> void:
 				inline_mutations = data.inline_mutations
 				conditions = data.conditions
 				time = data.time
+				tags = data.tags
 
 			_DialogueConstants.TYPE_MUTATION:
 				mutation = data.mutation

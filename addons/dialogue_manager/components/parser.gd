@@ -3,14 +3,15 @@
 class_name DialogueManagerParser extends Object
 
 
-const DialogueConstants = preload("res://addons/dialogue_manager/constants.gd")
-const DialogueSettings = preload("res://addons/dialogue_manager/components/settings.gd")
+const DialogueConstants = preload("../constants.gd")
+const DialogueSettings = preload("./settings.gd")
 
 
 var IMPORT_REGEX: RegEx = RegEx.create_from_string("import \"(?<path>[^\"]+)\" as (?<prefix>[^\\!\\@\\#\\$\\%\\^\\&\\*\\(\\)\\-\\=\\+\\{\\}\\[\\]\\;\\:\\\"\\'\\,\\.\\<\\>\\?\\/\\s]+)")
 var VALID_TITLE_REGEX: RegEx = RegEx.create_from_string("^[^\\!\\@\\#\\$\\%\\^\\&\\*\\(\\)\\-\\=\\+\\{\\}\\[\\]\\;\\:\\\"\\'\\,\\.\\<\\>\\?\\/\\s]+$")
 var BEGINS_WITH_NUMBER_REGEX: RegEx = RegEx.create_from_string("^\\d")
 var TRANSLATION_REGEX: RegEx = RegEx.create_from_string("\\[ID:(?<tr>.*?)\\]")
+var TAGS_REGEX: RegEx = RegEx.create_from_string("\\[#(?<tags>.*?)\\]")
 var MUTATION_REGEX: RegEx = RegEx.create_from_string("(do|set) (?<mutation>.*)")
 var CONDITION_REGEX: RegEx = RegEx.create_from_string("(if|elif|while|else if) (?<condition>.*)")
 var WRAPPED_CONDITION_REGEX: RegEx = RegEx.create_from_string("\\[if (?<condition>.*)\\]")
@@ -126,6 +127,12 @@ func parse(text: String, path: String) -> Error:
 		if is_response_line(raw_line):
 			parent_stack.append(str(id))
 			line["type"] = DialogueConstants.TYPE_RESPONSE
+
+			# Extract any #tags
+			var tag_data: ResolvedTagData = extract_tags(raw_line)
+			line["tags"] = tag_data.tags
+			raw_line = tag_data.line_without_tags
+
 			if " [if " in raw_line:
 				line["condition"] = extract_condition(raw_line, true, indent_size)
 			if " =>" in raw_line:
@@ -183,6 +190,7 @@ func parse(text: String, path: String) -> Error:
 					next_id = line.next_id,
 					next_id_after = line.next_id_after,
 					text_replacements = line.text_replacements,
+					tags = line.tags,
 					translation_key = line.get("translation_key")
 				}
 
@@ -296,6 +304,12 @@ func parse(text: String, path: String) -> Error:
 				raw_line = WEIGHTED_RANDOM_SIBLINGS_REGEX.sub(raw_line, "")
 
 			line["type"] = DialogueConstants.TYPE_DIALOGUE
+
+			# Extract any tags before we process the line
+			var tag_data: ResolvedTagData = extract_tags(raw_line)
+			line["tags"] = tag_data.tags
+			raw_line = tag_data.line_without_tags
+
 			var l = raw_line.replace("\\:", "!ESCAPED_COLON!")
 			if ": " in l:
 				var bits = Array(l.strip_edges().split(": "))
@@ -452,16 +466,16 @@ func prepare(text: String, path: String, include_imported_titles_hashes: bool = 
 
 				# Keep track of titles so we can add imported ones later
 				if str(import_data.path.hash()) in imported_titles.keys():
-					errors.append({ line_number = id, column_number = 0, error = DialogueConstants.ERR_FILE_ALREADY_IMPORTED })
+					add_error(id, 0, DialogueConstants.ERR_FILE_ALREADY_IMPORTED)
 				if import_data.prefix in imported_titles.values():
-					errors.append({ line_number = id, column_number = 0, error = DialogueConstants.ERR_DUPLICATE_IMPORT_NAME })
+					add_error(id, 0, DialogueConstants.ERR_DUPLICATE_IMPORT_NAME)
 				imported_titles[str(import_data.path.hash())] = import_data.prefix
 
 				# Import the file content
 				if not import_data.path.hash() in known_imports:
-					var error: Error = import_content(import_data.path, import_data.prefix, known_imports)
+					var error: Error = import_content(import_data.path, import_data.prefix, _imported_line_map, known_imports)
 					if error != OK:
-						errors.append({ line_number = id, column_number = 0, error = error })
+						add_error(id, 0, error)
 
 	var imported_content: String =  ""
 	var cummulative_line_number: int = 0
@@ -510,7 +524,9 @@ func add_error(line_number: int, column_number: int, error: int) -> void:
 			errors.append({
 				line_number = item.imported_on_line_number,
 				column_number = 0,
-				error = DialogueConstants.ERR_ERRORS_IN_IMPORTED_FILE
+				error = DialogueConstants.ERR_ERRORS_IN_IMPORTED_FILE,
+				external_error = error,
+				external_line_number = line_number
 			})
 			return
 
@@ -525,8 +541,11 @@ func add_error(line_number: int, column_number: int, error: int) -> void:
 func remove_error(line_number: int, error: int) -> void:
 	for i in range(errors.size() - 1, -1, -1):
 		var err = errors[i]
-		if err.line_number == line_number - _imported_line_count and err.error == error:
+		var is_native_error = err.line_number == line_number - _imported_line_count and err.error == error
+		var is_external_error = err.get("external_line_number") == line_number and err.get("external_error") == error
+		if is_native_error or is_external_error:
 			errors.remove_at(i)
+			return
 
 
 func is_import_line(line: String) -> bool:
@@ -837,21 +856,29 @@ func find_next_line_after_responses(line_number: int) -> String:
 
 
 ## Import content from another dialogue file or return an ERR
-func import_content(path: String, prefix: String, known_imports: Dictionary) -> Error:
+func import_content(path: String, prefix: String, imported_line_map: Array[Dictionary], known_imports: Dictionary) -> Error:
 	if FileAccess.file_exists(path):
 		var file = FileAccess.open(path, FileAccess.READ)
 		var content: PackedStringArray = file.get_as_text().split("\n")
 
 		var imported_titles: Dictionary = {}
 
-		for line in content:
+		for index in range(0, content.size()):
+			var line = content[index]
 			if is_import_line(line):
 				var import = extract_import_path_and_name(line)
 				if import.size() > 0:
+					# Make a map so we can refer compiled lines to where they were imported from
+					imported_line_map.append({
+						hash = import.path.hash(),
+						imported_on_line_number = index,
+						from_line = 0,
+						to_line = 0
+					})
 					if not known_imports.has(import.path.hash()):
 						# Add an empty record into the keys just so we don't end up with cyclic dependencies
 						known_imports[import.path.hash()] = ""
-						if import_content(import.path, import.prefix, known_imports) != OK:
+						if import_content(import.path, import.prefix, imported_line_map, known_imports) != OK:
 							return ERR_LINK_FAILED
 					imported_titles[import.prefix] = import.path.hash()
 
@@ -898,7 +925,7 @@ func import_content(path: String, prefix: String, known_imports: Dictionary) -> 
 					content[i] = "%s=> %s/%s" % [line.split("=> ")[0], str(path.hash()), jump]
 
 		imported_paths.append(path)
-		known_imports[path.hash()] = "# %s as %s\n%s\n=> END\n" % [path, path.hash(), "\n".join(content)]
+		known_imports[path.hash()] = "\n".join(content) + "\n=> END\n"
 		return OK
 	else:
 		return ERR_FILE_NOT_FOUND
@@ -1061,6 +1088,23 @@ func extract_goto(line: String) -> String:
 		return titles.get(title)
 	else:
 		return DialogueConstants.ID_ERROR
+
+
+func extract_tags(line: String) -> ResolvedTagData:
+	var resolved_tags: PackedStringArray = []
+	var tag_matches: Array[RegExMatch] = TAGS_REGEX.search_all(line)
+	for tag_match in tag_matches:
+		line = line.replace(tag_match.get_string(), "")
+		var tags = tag_match.get_string().replace("[#", "").replace("]", "").replace(" ", "").split(",")
+		for tag in tags:
+			tag = tag.replace("#", "")
+			if not tag in resolved_tags:
+				resolved_tags.append(tag)
+
+	return ResolvedTagData.new({
+		tags = resolved_tags,
+		line_without_tags = line
+	})
 
 
 func extract_markers(line: String) -> ResolvedLineData:
