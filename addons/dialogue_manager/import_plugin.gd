@@ -6,10 +6,9 @@ signal compiled_resource(resource: Resource)
 
 
 const DialogueResource = preload("./dialogue_resource.gd")
-const compiler_version = 10
+const DialogueManagerParseResult = preload("./components/parse_result.gd")
 
-
-var editor_plugin
+const compiler_version = 11
 
 
 func _get_importer_name() -> String:
@@ -63,6 +62,8 @@ func _get_option_visibility(path: String, option_name: StringName, options: Dict
 
 
 func _import(source_file: String, save_path: String, options: Dictionary, platform_variants: Array[String], gen_files: Array[String]) -> Error:
+	var cache = Engine.get_meta("DialogueCache")
+
 	# Get the raw file contents
 	if not FileAccess.file_exists(source_file): return ERR_FILE_NOT_FOUND
 
@@ -78,7 +79,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 
 	if err != OK:
 		printerr("%d errors found in %s" % [errors.size(), source_file])
-		editor_plugin.add_errors_to_cache(source_file, errors)
+		cache.add_errors_to_file(source_file, errors)
 		return err
 
 	# Get the current addon version
@@ -90,16 +91,22 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 	var resource: DialogueResource = DialogueResource.new()
 	resource.set_meta("dialogue_manager_version", version)
 
+	resource.using_states = data.using_states
 	resource.titles = data.titles
 	resource.first_title = data.first_title
 	resource.character_names = data.character_names
 	resource.lines = data.lines
 
 	# Clear errors and possibly trigger any cascade recompiles
-	editor_plugin.add_file_to_cache(source_file, data)
+	cache.add_file(source_file, data)
 
 	err = ResourceSaver.save(resource, "%s.%s" % [save_path, _get_save_extension()])
 
 	compiled_resource.emit(resource)
+
+	# Recompile any dependencies
+	var dependent_paths: PackedStringArray = cache.get_dependent_paths_for_reimport(source_file)
+	for path in dependent_paths:
+		append_import_external_resource(path)
 
 	return err

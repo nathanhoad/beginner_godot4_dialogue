@@ -3,7 +3,7 @@ extends Control
 
 
 const DialogueConstants = preload("../constants.gd")
-const DialogueSettings = preload("../components/settings.gd")
+const DialogueSettings = preload("../settings.gd")
 
 const OPEN_OPEN = 100
 const OPEN_CLEAR = 101
@@ -166,12 +166,14 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	if event is InputEventKey and event.is_pressed():
 		match event.as_text():
-			"Ctrl+Alt+S":
+			"Ctrl+Alt+S", "Command+Alt+S":
+				get_viewport().set_input_as_handled()
 				save_file(current_file_path)
-			"Ctrl+W":
+			"Ctrl+W", "Command+W":
 				get_viewport().set_input_as_handled()
 				close_file(current_file_path)
-			"Ctrl+F5":
+			"Ctrl+F5", "Command+F5":
+				get_viewport().set_input_as_handled()
 				_on_test_button_pressed()
 
 
@@ -255,26 +257,29 @@ func open_file(path: String) -> void:
 
 
 func show_file_in_filesystem(path: String) -> void:
-	var file_system = editor_plugin.get_editor_interface().get_file_system_dock()
-	file_system.navigate_to_path(path)
+	var file_system_dock: FileSystemDock = Engine.get_meta("DialogueManagerPlugin") \
+		.get_editor_interface() \
+		.get_file_system_dock()
+
+	file_system_dock.navigate_to_path(path)
 
 
 # Save any open files
 func save_files() -> void:
+	save_all_button.disabled = true
+
 	var saved_files: PackedStringArray = []
 	for path in open_buffers:
 		if open_buffers[path].text != open_buffers[path].pristine_text:
 			saved_files.append(path)
-		save_file(path)
+		save_file(path, false)
 
-	# Make sure we reimport/recompile the changes
 	if saved_files.size() > 0:
-		editor_plugin.get_editor_interface().get_resource_filesystem().reimport_files(saved_files)
-	save_all_button.disabled = true
+		Engine.get_meta("DialogueCache").reimport_files(saved_files)
 
 
 # Save a file
-func save_file(path: String) -> void:
+func save_file(path: String, rescan_file_system: bool = true) -> void:
 	var buffer = open_buffers[path]
 
 	files_list.mark_file_as_unsaved(path, false)
@@ -290,6 +295,12 @@ func save_file(path: String) -> void:
 	var file: FileAccess = FileAccess.open(path, FileAccess.WRITE)
 	file.store_string(buffer.text)
 	file.close()
+
+	if rescan_file_system:
+		Engine.get_meta("DialogueManagerPlugin") \
+			.get_editor_interface() \
+			.get_resource_filesystem()\
+			.scan()
 
 
 func close_file(file: String) -> void:
@@ -410,7 +421,8 @@ func apply_theme() -> void:
 		open_dialog.min_size = Vector2(600, 500) * scale
 		export_dialog.min_size = Vector2(600, 500) * scale
 		export_dialog.min_size = Vector2(600, 500) * scale
-		settings_dialog.min_size = Vector2(600, 600) * scale
+		settings_dialog.min_size = Vector2(1000, 600) * scale
+		settings_dialog.max_size = Vector2(1000, 600) * scale
 
 
 ### Helpers
@@ -911,6 +923,7 @@ func _on_search_and_replace_close_requested() -> void:
 
 
 func _on_settings_button_pressed() -> void:
+	settings_view.prepare()
 	settings_dialog.popup_centered()
 
 
@@ -920,7 +933,7 @@ func _on_settings_view_script_button_pressed(path: String) -> void:
 
 
 func _on_test_button_pressed() -> void:
-	apply_changes()
+	save_file(current_file_path)
 
 	if errors_panel.errors.size() > 0:
 		errors_dialog.popup_centered()
@@ -933,6 +946,7 @@ func _on_test_button_pressed() -> void:
 
 
 func _on_settings_dialog_confirmed() -> void:
+	settings_view.apply_settings_changes()
 	parse()
 	code_edit.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY if DialogueSettings.get_setting("wrap_lines", false) else TextEdit.LINE_WRAPPING_NONE
 	code_edit.grab_focus()
@@ -949,6 +963,10 @@ func _on_docs_button_pressed() -> void:
 func _on_files_list_file_popup_menu_requested(at_position: Vector2) -> void:
 	files_popup_menu.position = Vector2(get_viewport().position) + files_list.global_position + at_position
 	files_popup_menu.popup()
+
+
+func _on_files_list_file_middle_clicked(path: String):
+	close_file(path)
 
 
 func _on_files_popup_menu_about_to_popup() -> void:

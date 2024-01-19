@@ -2,7 +2,8 @@ extends Node
 
 
 const DialogueConstants = preload("../constants.gd")
-const DialogueSettings = preload("./settings.gd")
+const DialogueSettings = preload("../settings.gd")
+const DialogueManagerParseResult = preload("./parse_result.gd")
 
 
 # Keeps track of errors and dependencies.
@@ -15,27 +16,46 @@ const DialogueSettings = preload("./settings.gd")
 # }
 var _cache: Dictionary = {}
 
+var _update_dependency_timer: Timer = Timer.new()
+var _update_dependency_paths: PackedStringArray = []
 
-func _init() -> void:
+
+func _ready() -> void:
+	add_child(_update_dependency_timer)
+	_update_dependency_timer.timeout.connect(_on_update_dependency_timeout)
+
 	_build_cache()
+
+
+func reimport_files(files: PackedStringArray = []) -> void:
+	if files.is_empty(): files = get_files()
+
+	var file_system: EditorFileSystem = Engine.get_meta("DialogueManagerPlugin") \
+		.get_editor_interface() \
+		.get_resource_filesystem()
+
+	# NOTE: Godot 4.2rc1 has an issue with reimporting more than one
+	# file at a time so we do them one by one
+	for file in files:
+		file_system.reimport_files([file])
+		await get_tree().create_timer(0.2)
 
 
 ## Add a dialogue file to the cache.
 func add_file(path: String, parse_results: DialogueManagerParseResult = null) -> void:
-	var dependencies: PackedStringArray = []
-
-	if parse_results != null:
-		dependencies = Array(parse_results.imported_paths).filter(func(d): return d != path)
-
 	_cache[path] = {
 		path = path,
-		dependencies = dependencies,
+		dependencies = [],
 		errors = []
 	}
 
+	if parse_results != null:
+		_cache[path].dependencies = Array(parse_results.imported_paths).filter(func(d): return d != path)
+		_cache[path].parsed_at = Time.get_ticks_msec()
+
 	# If this is a fresh cache entry then we need to check for dependencies
-	if parse_results == null:
-		WorkerThreadPool.add_task(_update_dependencies.bind(path))
+	if parse_results == null and not _update_dependency_paths.has(path):
+		queue_updating_dependencies(path)
 
 
 ## Get the file paths in the cache.
@@ -65,16 +85,33 @@ func get_files_with_errors() -> Array[Dictionary]:
 	return files_with_errors
 
 
+## Queue a file to have it's dependencies checked
+func queue_updating_dependencies(of_path: String) -> void:
+	_update_dependency_timer.stop()
+	if not _update_dependency_paths.has(of_path):
+		_update_dependency_paths.append(of_path)
+	_update_dependency_timer.start(0.5)
+
+
 ## Update any references to a file path that has moved
 func move_file_path(from_path: String, to_path: String) -> void:
-	if _cache.has(from_path):
+	if not _cache.has(from_path): return
+
+	if to_path != "":
 		_cache[to_path] = _cache[from_path].duplicate()
-		_cache.erase(from_path)
+	_cache.erase(from_path)
 
 
 ## Get any dialogue files that import a given path.
 func get_files_with_dependency(imported_path: String) -> Array:
-	return _cache.values().filter(func(d): return imported_path in d.dependencies)
+	return _cache.values().filter(func(d): return d.dependencies.has(imported_path))
+
+
+## Get any paths that are dependent on a given path
+func get_dependent_paths_for_reimport(on_path: String) -> PackedStringArray:
+	return get_files_with_dependency(on_path) \
+		.filter(func(d): return Time.get_ticks_msec() - d.get("parsed_at", 0) > 3000) \
+		.map(func(d): return d.path)
 
 
 # Build the initial cache for dialogue files.
@@ -104,12 +141,20 @@ func _get_dialogue_files_in_filesystem(path: String = "res://") -> PackedStringA
 	return files
 
 
-# Check for dependencies of a path
-func _update_dependencies(path: String) -> void:
-	var file: FileAccess = FileAccess.open(path, FileAccess.READ)
+### Signals
+
+
+func _on_update_dependency_timeout() -> void:
+	_update_dependency_timer.stop()
 	var import_regex: RegEx = RegEx.create_from_string("import \"(?<path>.*?)\"")
-	var found_imports = import_regex.search_all(file.get_as_text())
-	var dependencies: PackedStringArray = []
-	for found in found_imports:
-		dependencies.append(found.strings[found.names.path])
-	_cache[path].dependencies = dependencies
+	var file: FileAccess
+	var found_imports: Array[RegExMatch]
+	for path in _update_dependency_paths:
+		# Open the file and check for any "import" lines
+		file = FileAccess.open(path, FileAccess.READ)
+		found_imports = import_regex.search_all(file.get_as_text())
+		var dependencies: PackedStringArray = []
+		for found in found_imports:
+			dependencies.append(found.strings[found.names.path])
+		_cache[path].dependencies = dependencies
+	_update_dependency_paths.clear()

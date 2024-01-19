@@ -2,7 +2,7 @@
 extends Node
 
 
-const DialogueConstants = preload("../constants.gd")
+const DialogueConstants = preload("./constants.gd")
 
 
 ### Editor config
@@ -15,8 +15,10 @@ const DEFAULT_SETTINGS = {
 	new_with_template = true,
 	include_all_responses = false,
 	ignore_missing_state_values = false,
-	custom_test_scene_path = preload("../test_scene.tscn").resource_path,
-	default_csv_locale = "en"
+	custom_test_scene_path = preload("./test_scene.tscn").resource_path,
+	default_csv_locale = "en",
+	balloon_path = "",
+	create_lines_for_responses_with_characters = true
 }
 
 
@@ -36,10 +38,19 @@ static func prepare() -> void:
 			ProjectSettings.set_setting("dialogue_manager/%s" % key, null)
 			set_setting(key, value)
 
-	# Set up defaults
+	# Set up initial settings
 	for setting in DEFAULT_SETTINGS:
-		if ProjectSettings.has_setting("dialogue_manager/general/%s" % setting):
-			ProjectSettings.set_initial_value("dialogue_manager/general/%s" % setting, DEFAULT_SETTINGS[setting])
+		var setting_name: String = "dialogue_manager/general/%s" % setting
+		if not ProjectSettings.has_setting(setting_name):
+			set_setting(setting, DEFAULT_SETTINGS[setting])
+		ProjectSettings.set_initial_value(setting_name, DEFAULT_SETTINGS[setting])
+		if setting.ends_with("_path"):
+			ProjectSettings.add_property_info({
+				"name": setting_name,
+				"type": TYPE_STRING,
+				"hint": PROPERTY_HINT_FILE,
+			})
+
 	ProjectSettings.save()
 
 
@@ -56,6 +67,14 @@ static func get_setting(key: String, default):
 		return default
 
 
+static func get_settings(only_keys: PackedStringArray = []) -> Dictionary:
+	var settings: Dictionary = {}
+	for key in DEFAULT_SETTINGS.keys():
+		if only_keys.is_empty() or key in only_keys:
+			settings[key] = get_setting(key, DEFAULT_SETTINGS[key])
+	return settings
+
+
 ### User config
 
 
@@ -66,7 +85,9 @@ static func get_user_config() -> Dictionary:
 		carets = {},
 		run_title = "",
 		run_resource_path = "",
-		is_running_test_scene = false
+		is_running_test_scene = false,
+		has_dotnet_solution = false,
+		open_in_external_editor = false
 	}
 
 	if FileAccess.file_exists(DialogueConstants.USER_CONFIG_PATH):

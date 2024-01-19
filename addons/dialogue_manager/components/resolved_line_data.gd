@@ -1,11 +1,10 @@
-class_name ResolvedLineData extends RefCounted
+extends RefCounted
 
 var text: String = ""
 var pauses: Dictionary = {}
 var speeds: Dictionary = {}
 var mutations: Array[Array] = []
-var conditions: Dictionary = {}
-var time = null
+var time: String = ""
 
 
 func _init(data: Dictionary) -> void:
@@ -13,5 +12,4 @@ func _init(data: Dictionary) -> void:
 	pauses = data.pauses
 	speeds = data.speeds
 	mutations = data.mutations
-	conditions = data.conditions
 	time = data.time

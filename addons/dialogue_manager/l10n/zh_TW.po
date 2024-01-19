@@ -1,10 +1,15 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: Dialogue Manager\n"
-"Language: zh-tw\n"
+"POT-Creation-Date: \n"
+"PO-Revision-Date: \n"
+"Last-Translator: \n"
+"Language-Team: 憨憨羊の宇航鴿鴿\n"
+"Language: zh_TW\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
+"X-Generator: Poedit 3.4\n"
 
 msgid "start_a_new_file"
 msgstr "創建新檔案"
@@ -37,10 +42,10 @@ msgid "translations"
 msgstr "翻譯"
 
 msgid "settings"
-msgstr "設置"
+msgstr "設定"
 
 msgid "show_support"
-msgstr "支持 Dialogue Manager"
+msgstr "支援 Dialogue Manager"
 
 msgid "docs"
 msgstr "文檔"
@@ -94,7 +99,7 @@ msgid "save_to_csv"
 msgstr "生成 CSV"
 
 msgid "import_from_csv"
-msgstr "從 CSV 導入"
+msgstr "從 CSV 匯入"
 
 msgid "confirm_close"
 msgstr "是否要儲存到“{path}”？"
@@ -148,7 +153,7 @@ msgid "settings.wrap_long_lines"
 msgstr "自動折行"
 
 msgid "settings.characters_translations"
-msgstr "在翻譯檔案中導出角色名。"
+msgstr "在翻譯檔案中匯出角色名。"
 
 msgid "settings.include_failed_responses"
 msgstr "在判斷條件失敗時仍顯示回復選項"
@@ -158,6 +163,9 @@ msgstr "忽略全局變量缺失錯誤（不建議）"
 
 msgid "settings.custom_test_scene"
 msgstr "自訂測試場景（必須繼承自BaseDialogueTestScene）"
+
+msgid "settings.default_csv_locale"
+msgstr "預設 CSV 區域格式"
 
 msgid "settings.states_shortcuts"
 msgstr "全局變量映射"
@@ -211,13 +219,13 @@ msgid "errors_with_build"
 msgstr "請先解決 Dialogue 中的錯誤。"
 
 msgid "errors.import_errors"
-msgstr "被導入的檔案存在問題。"
+msgstr "被匯入的檔案存在問題。"
 
 msgid "errors.already_imported"
-msgstr "檔案已被導入。"
+msgstr "檔案已被匯入。"
 
 msgid "errors.duplicate_import"
-msgstr "導入名不能重複。"
+msgstr "匯入名不能重複。"
 
 msgid "errors.empty_title"
 msgstr "標題名不能爲空。"

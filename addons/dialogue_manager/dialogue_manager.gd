@@ -1,17 +1,34 @@
 extends Node
 
 
+## Emitted when a title is encountered while traversing dialogue, usually when jumping from a
+## goto line
 signal passed_title(title)
+
+## Emitted when a line of dialogue is encountered.
 signal got_dialogue(line)
+
+## Emitted when a mutation is encountered.
 signal mutated(mutation)
+
+## Emitted when some dialogue has reached the end.
 signal dialogue_ended(resource)
+
+## Used internally.
 signal bridge_get_next_dialogue_line_completed(line)
+
+## Used inernally
+signal bridge_mutated()
 
 
 const DialogueConstants = preload("./constants.gd")
-const DialogueSettings = preload("./components/settings.gd")
+const DialogueSettings = preload("./settings.gd")
+const DialogueResource = preload("./dialogue_resource.gd")
 const DialogueLine = preload("./dialogue_line.gd")
 const DialogueResponse = preload("./dialogue_response.gd")
+const DialogueManagerParser = preload("./components/parser.gd")
+const DialogueManagerParseResult = preload("./components/parse_result.gd")
+const ResolvedLineData = preload("./components/resolved_line_data.gd")
 
 
 enum MutationBehaviour {
@@ -28,17 +45,24 @@ enum TranslationSource {
 }
 
 
-# The list of globals that dialogue can query
+## The list of globals that dialogue can query
 var game_states: Array = []
 
-# Allow dialogue to call singletons
+## Allow dialogue to call singletons
 var include_singletons: bool = true
 
-# Allow dialogue to call static methods/properties on classes
+## Allow dialogue to call static methods/properties on classes
 var include_classes: bool = true
 
-# Manage translation behaviour
+## Manage translation behaviour
 var translation_source: TranslationSource = TranslationSource.Guess
+
+## Used to resolve the current scene. Override if your game manages the current scene itself.
+var get_current_scene: Callable = func():
+	var current_scene: Node = get_tree().current_scene
+	if current_scene == null:
+		current_scene = get_tree().root.get_child(get_tree().root.get_child_count() - 1)
+	return current_scene
 
 var _node_properties: Array = []
 
@@ -71,6 +95,10 @@ func _ready() -> void:
 		if state:
 			game_states.append(state)
 
+	# Connect up the C# signals if need be
+	if _has_dotnet_solution():
+		_get_dotnet_dialogue_manager().Prepare()
+
 
 ## Step through lines and run any mutations until we either hit some dialogue or the end of the conversation
 func get_next_dialogue_line(resource: DialogueResource, key: String = "", extra_game_states: Array = [], mutation_behaviour: MutationBehaviour = MutationBehaviour.Wait) -> DialogueLine:
@@ -78,6 +106,15 @@ func get_next_dialogue_line(resource: DialogueResource, key: String = "", extra_
 	assert(resource != null, DialogueConstants.translate("runtime.no_resource"))
 	assert(resource.lines.size() > 0, DialogueConstants.translate("runtime.no_content").format({ file_path = resource.resource_path }))
 
+	# Inject any "using" states into the game_states
+	for state_name in resource.using_states:
+		var autoload = get_tree().root.get_node_or_null(state_name)
+		if autoload == null:
+			printerr(DialogueConstants.translate("runtime.unknown_autoload").format({ autoload = state_name }))
+		else:
+			extra_game_states = [autoload] + extra_game_states
+
+	# Get the line data
 	var dialogue: DialogueLine = await get_line(resource, key, extra_game_states)
 
 	# If our dialogue is nothing then we hit the end
@@ -114,49 +151,77 @@ func get_resolved_line_data(data: Dictionary, extra_game_states: Array = []) -> 
 		var value = await resolve(replacement.expression.duplicate(true), extra_game_states)
 		text = text.replace(replacement.value_in_text, str(value))
 
+	var parser: DialogueManagerParser = DialogueManagerParser.new()
+
 	# Resolve random groups
-	var random_regex: RegEx = RegEx.new()
-	random_regex.compile("\\[\\[(?<options>.*?)\\]\\]")
-	for found in random_regex.search_all(text):
+	for found in parser.INLINE_RANDOM_REGEX.search_all(text):
 		var options = found.get_string("options").split("|")
 		text = text.replace("[[%s]]" % found.get_string("options"), options[randi_range(0, options.size() - 1)])
 
 	# Do a pass on the markers to find any conditionals
-	var markers: ResolvedLineData = DialogueManagerParser.extract_markers_from_string(text)
+	var markers: ResolvedLineData = parser.extract_markers(text)
 
 	# Resolve any conditionals and update marker positions as needed
-	var resolved_text: String = ""
-	var should_display: bool = true
-	var should_display_stack: Array[bool] = []
-	var previous_should_display: bool = true
-	var previous_index_written: int = -1
-	for index in range(markers.text.length()):
-		if markers.conditions.has(index):
-			if markers.conditions[index] == null:
-				should_display = should_display_stack[-1]
-				should_display_stack.pop_back()
-			else:
-				var result = await check_condition({ condition = markers.conditions[index] }, extra_game_states)
-				should_display_stack.push_back(should_display)
-				should_display = should_display and result
-		if not previous_should_display and should_display:
-			adjust_marker_indices(previous_index_written, index, markers)
-		elif previous_should_display and not should_display:
-			previous_index_written = index
-		previous_should_display = should_display
-		if should_display:
-			resolved_text += markers.text[index]
+	var resolved_text: String = markers.text
+	var conditionals: Array[RegExMatch] = parser.INLINE_CONDITIONALS_REGEX.search_all(resolved_text)
+	var replacements: Array = []
+	for conditional in conditionals:
+		var condition_raw: String = conditional.strings[conditional.names.condition]
+		var body: String = conditional.strings[conditional.names.body]
+		var body_else: String = ""
+		if "[else]" in body:
+			var bits = body.split("[else]")
+			body = bits[0]
+			body_else = bits[1]
+		var condition: Dictionary = parser.extract_condition("if " + condition_raw, false, 0)
+		# If the condition fails then use the else of ""
+		if not await check_condition({ condition = condition }, extra_game_states):
+			body = body_else
+		replacements.append({
+			start = conditional.get_start(),
+			end = conditional.get_end(),
+			string = conditional.get_string(),
+			body = body
+		})
+
+	for i in range(replacements.size() -1, -1, -1):
+		var r: Dictionary = replacements[i]
+		resolved_text = resolved_text.substr(0, r.start) + r.body + resolved_text.substr(r.end, 9999)
+		# Move any other markers now that the text has changed
+		var offset: int = r.end - r.start - r.body.length()
+		for key in ["pauses", "speeds", "time"]:
+			if markers.get(key) == null: continue
+			var marker = markers.get(key)
+			var next_marker: Dictionary = {}
+			for index in marker:
+				if index < r.start:
+					next_marker[index] = marker[index]
+				elif index > r.start:
+					next_marker[index - offset] = marker[index]
+			markers.set(key, next_marker)
+		var mutations: Array[Array] = markers.mutations
+		var next_mutations: Array[Array] = []
+		for mutation in mutations:
+			var index = mutation[0]
+			if index < r.start:
+				next_mutations.append(mutation)
+			elif index > r.start:
+				next_mutations.append([index - offset, mutation[1]])
+		markers.mutations = next_mutations
+
 	markers.text = resolved_text
+
+	parser.free()
 
 	return markers
 
 
 ## Replace any variables, etc in the character name
 func get_resolved_character(data: Dictionary, extra_game_states: Array = []) -> String:
-	var character: String = data.character
+	var character: String = data.get("character", "")
 
 	# Resolve variables
-	for replacement in data.character_replacements:
+	for replacement in data.get("character_replacements", []):
 		var value = await resolve(replacement.expression.duplicate(true), extra_game_states)
 		character = character.replace(replacement.value_in_text, str(value))
 
@@ -196,17 +261,41 @@ func create_resource_from_text(text: String) -> Resource:
 
 
 ## Show the example balloon
-func show_example_dialogue_balloon(resource: DialogueResource, title: String = "", extra_game_states: Array = []) -> void:
-	var ExampleBalloonScene = load("res://addons/dialogue_manager/example_balloon/example_balloon.tscn")
-	var SmallExampleBalloonScene = load("res://addons/dialogue_manager/example_balloon/small_example_balloon.tscn")
-
-	var is_small_window: bool = ProjectSettings.get_setting("display/window/size/viewport_width") < 400
-	var balloon: Node = (SmallExampleBalloonScene if is_small_window else ExampleBalloonScene).instantiate()
-	get_tree().current_scene.add_child(balloon)
+func show_example_dialogue_balloon(resource: DialogueResource, title: String = "", extra_game_states: Array = []) -> CanvasLayer:
+	var balloon: Node = load(_get_example_balloon_path()).instantiate()
+	get_current_scene.call().add_child(balloon)
 	balloon.start(resource, title, extra_game_states)
+
+	return balloon
+
+
+## Show the configured dialogue balloon
+func show_dialogue_balloon(resource: DialogueResource, title: String = "", extra_game_states: Array = []) -> Node:
+	var balloon: Node = load(DialogueSettings.get_setting("balloon_path", _get_example_balloon_path())).instantiate()
+	get_current_scene.call().add_child(balloon)
+	balloon.start(resource, title, extra_game_states)
+	return balloon
+
+
+# Get the path to the example balloon
+func _get_example_balloon_path() -> String:
+	var is_small_window: bool = ProjectSettings.get_setting("display/window/size/viewport_width") < 400
+	var balloon_path: String = "/example_balloon/small_example_balloon.tscn" if is_small_window else "/example_balloon/example_balloon.tscn"
+	return get_script().resource_path.get_base_dir() + balloon_path
 
 
 ### Dotnet bridge
+
+
+func _has_dotnet_solution() -> bool:
+	if not DialogueSettings.get_user_value("has_dotnet_solution", false): return false
+	if not ResourceLoader.exists("res://addons/dialogue_manager/DialogueManager.cs"): return false
+	if load("res://addons/dialogue_manager/DialogueManager.cs") == null: return false
+	return true
+
+
+func _get_dotnet_dialogue_manager() -> Node:
+	return load("res://addons/dialogue_manager/DialogueManager.cs").new()
 
 
 func _bridge_get_next_dialogue_line(resource: DialogueResource, key: String, extra_game_states: Array = []) -> void:
@@ -215,6 +304,11 @@ func _bridge_get_next_dialogue_line(resource: DialogueResource, key: String, ext
 
 	var line = await get_next_dialogue_line(resource, key, extra_game_states)
 	bridge_get_next_dialogue_line_completed.emit(line)
+
+
+func _bridge_mutate(mutation: Dictionary, extra_game_states: Array, is_inline_mutation: bool = false) -> void:
+	await mutate(mutation, extra_game_states, is_inline_mutation)
+	bridge_mutated.emit()
 
 
 ### Helpers
@@ -257,17 +351,17 @@ func get_line(resource: DialogueResource, key: String, extra_game_states: Array)
 
 	# Check for weighted random lines
 	if data.has("siblings"):
-		var result = randi() % data.siblings.reduce(func(total, sibling): return total + sibling.weight, 0)
-		var cummulative_weight = 0
+		var target_weight: float = randf_range(0, data.siblings.reduce(func(total, sibling): return total + sibling.weight, 0))
+		var cummulative_weight: float = 0
 		for sibling in data.siblings:
-			if result < cummulative_weight + sibling.weight:
+			if target_weight < cummulative_weight + sibling.weight:
 				data = resource.lines.get(sibling.id)
 				break
 			else:
 				cummulative_weight += sibling.weight
 
 	# Check condtiions
-	elif data.type == DialogueConstants.TYPE_CONDITION:
+	if data.type == DialogueConstants.TYPE_CONDITION:
 		# "else" will have no actual condition
 		if await check_condition(data, extra_game_states):
 			return await get_line(resource, data.next_id + id_trail, extra_game_states)
@@ -364,7 +458,6 @@ func create_dialogue_line(data: Dictionary, extra_game_states: Array) -> Dialogu
 				pauses = resolved_data.pauses,
 				speeds = resolved_data.speeds,
 				inline_mutations = resolved_data.mutations,
-				conditions = resolved_data.conditions,
 				time = resolved_data.time,
 				tags = data.get("tags", []),
 				extra_game_states = extra_game_states
@@ -399,6 +492,8 @@ func create_response(data: Dictionary, extra_game_states: Array) -> DialogueResp
 		type = DialogueConstants.TYPE_RESPONSE,
 		next_id = data.next_id,
 		is_allowed = await check_condition(data, extra_game_states),
+		character = await get_resolved_character(data, extra_game_states),
+		character_replacements = data.get("character_replacements", [] as Array[Dictionary]),
 		text = resolved_data.text,
 		text_replacements = data.text_replacements,
 		tags = data.get("tags", []),
@@ -408,7 +503,7 @@ func create_response(data: Dictionary, extra_game_states: Array) -> DialogueResp
 
 # Get the current game states
 func get_game_states(extra_game_states: Array) -> Array:
-	var current_scene: Node = get_tree().current_scene
+	var current_scene: Node = get_current_scene.call()
 	var unique_states: Array = []
 	for state in extra_game_states + [current_scene] + game_states:
 		if state != null and not unique_states.has(state):
@@ -545,88 +640,99 @@ func resolve(tokens: Array, extra_game_states: Array):
 		if token.type == DialogueConstants.TOKEN_FUNCTION:
 			var function_name: String = token.function
 			var args = await resolve_each(token.value, extra_game_states)
-			match function_name:
-				"str":
-					token["type"] = "value"
-					token["value"] = str(args[0])
-				"Vector2":
-					token["type"] = "value"
-					token["value"] = Vector2(args[0], args[1])
-				"Vector2i":
-					token["type"] = "value"
-					token["value"] = Vector2i(args[0], args[1])
-				"Vector3":
-					token["type"] = "value"
-					token["value"] = Vector3(args[0], args[1], args[2])
-				"Vector3i":
-					token["type"] = "value"
-					token["value"] = Vector3i(args[0], args[1], args[2])
-				"Vector4":
-					token["type"] = "value"
-					token["value"] = Vector4(args[0], args[1], args[2], args[3])
-				"Vector4i":
-					token["type"] = "value"
-					token["value"] = Vector4i(args[0], args[1], args[2], args[3])
-				"Quaternion":
-					token["type"] = "value"
-					token["value"] = Quaternion(args[0], args[1], args[2], args[3])
-				"Color":
-					token["type"] = "value"
-					match args.size():
-						0:
-							token["value"] = Color()
-						1:
-							token["value"] = Color(args[0])
-						2:
-							token["value"] = Color(args[0], args[1])
-						3:
-							token["value"] = Color(args[0], args[1], args[2])
-						4:
-							token["value"] = Color(args[0], args[1], args[2], args[3])
-				_:
-					if tokens[i - 1].type == DialogueConstants.TOKEN_DOT:
-						# If we are calling a deeper function then we need to collapse the
-						# value into the thing we are calling the function on
-						var caller: Dictionary = tokens[i - 2]
-						if typeof(caller.value) in DialogueConstants.SUPPORTED_PRIMITIVES:
-							caller["type"] = "value"
-							caller["value"] = resolve_primitive_method(caller.value, function_name, args)
-							tokens.remove_at(i)
-							tokens.remove_at(i-1)
-							i -= 2
-						elif thing_has_method(caller.value, function_name, args):
-							caller["type"] = "value"
-							caller["value"] = await resolve_thing_method(caller.value, function_name, args)
-							tokens.remove_at(i)
-							tokens.remove_at(i-1)
-							i -= 2
-						else:
-							show_error_for_missing_state_value(DialogueConstants.translate("runtime.method_not_callable").format({ method = function_name, object = str(caller.value) }))
-					else:
-						var found: bool = false
+			if tokens[i - 1].type == DialogueConstants.TOKEN_DOT:
+				# If we are calling a deeper function then we need to collapse the
+				# value into the thing we are calling the function on
+				var caller: Dictionary = tokens[i - 2]
+				if typeof(caller.value) in DialogueConstants.SUPPORTED_PRIMITIVES:
+					caller["type"] = "value"
+					caller["value"] = resolve_primitive_method(caller.value, function_name, args)
+					tokens.remove_at(i)
+					tokens.remove_at(i-1)
+					i -= 2
+				elif thing_has_method(caller.value, function_name, args):
+					caller["type"] = "value"
+					caller["value"] = await resolve_thing_method(caller.value, function_name, args)
+					tokens.remove_at(i)
+					tokens.remove_at(i-1)
+					i -= 2
+				else:
+					show_error_for_missing_state_value(DialogueConstants.translate("runtime.method_not_callable").format({ method = function_name, object = str(caller.value) }))
+			else:
+				var found: bool = false
+				match function_name:
+					"str":
+						token["type"] = "value"
+						token["value"] = str(args[0])
+						found = true
+					"Vector2":
+						token["type"] = "value"
+						token["value"] = Vector2(args[0], args[1])
+						found = true
+					"Vector2i":
+						token["type"] = "value"
+						token["value"] = Vector2i(args[0], args[1])
+						found = true
+					"Vector3":
+						token["type"] = "value"
+						token["value"] = Vector3(args[0], args[1], args[2])
+						found = true
+					"Vector3i":
+						token["type"] = "value"
+						token["value"] = Vector3i(args[0], args[1], args[2])
+						found = true
+					"Vector4":
+						token["type"] = "value"
+						token["value"] = Vector4(args[0], args[1], args[2], args[3])
+						found = true
+					"Vector4i":
+						token["type"] = "value"
+						token["value"] = Vector4i(args[0], args[1], args[2], args[3])
+						found = true
+					"Quaternion":
+						token["type"] = "value"
+						token["value"] = Quaternion(args[0], args[1], args[2], args[3])
+						found = true
+					"Color":
+						token["type"] = "value"
+						match args.size():
+							0:
+								token["value"] = Color()
+							1:
+								token["value"] = Color(args[0])
+							2:
+								token["value"] = Color(args[0], args[1])
+							3:
+								token["value"] = Color(args[0], args[1], args[2])
+							4:
+								token["value"] = Color(args[0], args[1], args[2], args[3])
+						found = true
+					"load":
+						token["type"] = "value"
+						token["value"] = load(args[0])
+						found = true
+					"emit":
+						token["type"] = "value"
+						token["value"] = resolve_signal(args, extra_game_states)
+						found = true
+					_:
+						for state in get_game_states(extra_game_states):
+							if typeof(state) in DialogueConstants.SUPPORTED_PRIMITIVES and thing_has_method(state, function_name, args):
+								token["type"] = "value"
+								token["value"] = resolve_primitive_method(state, function_name, args)
+								found = true
+							elif thing_has_method(state, function_name, args):
+								token["type"] = "value"
+								token["value"] = await resolve_thing_method(state, function_name, args)
+								found = true
 
-						if function_name == "emit":
-							token["type"] = "value"
-							token["value"] = resolve_signal(args, extra_game_states)
-							found = true
-						else:
-							for state in get_game_states(extra_game_states):
-								if typeof(state) in DialogueConstants.SUPPORTED_PRIMITIVES and thing_has_method(state, function_name, args):
-									token["type"] = "value"
-									token["value"] = resolve_primitive_method(state, function_name, args)
-									found = true
-								elif thing_has_method(state, function_name, args):
-									token["type"] = "value"
-									token["value"] = await resolve_thing_method(state, function_name, args)
-									found = true
+							if found:
+								break
 
-								if found:
-									break
-
-						show_error_for_missing_state_value(DialogueConstants.translate("runtime.method_not_found").format({
-							method = args[0] if function_name in ["call", "call_deferred"] else function_name,
-							states = str(get_game_states(extra_game_states))
-						}), not found)
+				show_error_for_missing_state_value(DialogueConstants.translate("runtime.method_not_found").format({
+					method = args[0] if function_name in ["call", "call_deferred"] else function_name,
+					states = str(get_game_states(extra_game_states))
+				}), not found)
 
 		elif token.type == DialogueConstants.TOKEN_DICTIONARY_REFERENCE:
 			var value
@@ -965,31 +1071,6 @@ func apply_operation(operator: String, first_value, second_value):
 	assert(false, DialogueConstants.translate("runtime.unknown_operator"))
 
 
-# Move the position of any markers after a given position
-func adjust_marker_indices(from: int, to: int, markers: ResolvedLineData) -> void:
-	for key in ["pauses", "speeds", "time"]: # mutations
-		if markers.get(key) == null:
-			continue
-		var marker = markers.get(key)
-		var next_marker: Dictionary = {}
-		for index in marker:
-			if index < from:
-				next_marker[index] = marker[index]
-			elif index > to:
-				next_marker[index - (to - from)] = marker[index]
-		markers.set(key, next_marker)
-
-	var mutations: Array[Array] = markers.mutations
-	var next_mutations: Array[Array] = []
-	for mutation in mutations:
-		var index = mutation[0]
-		if index < from:
-			next_mutations.append(mutation)
-		elif index > to:
-			next_mutations.append([index - (to - from), mutation[index]])
-	markers.mutations = next_mutations
-
-
 # Check if a dialogue line contains meaningful information
 func is_valid(line: DialogueLine) -> bool:
 	if line == null:
@@ -1020,10 +1101,9 @@ func thing_has_method(thing, method: String, args: Array) -> bool:
 	if thing.has_method(method):
 		return true
 
-	if method.to_snake_case() != method and ResourceLoader.exists("res://addons/dialogue_manager/DialogueManager.cs"):
+	if method.to_snake_case() != method and _has_dotnet_solution():
 		# If we get this far then the method might be a C# method with a Task return type
-		var dotnet_dialogue_manager = load("res://addons/dialogue_manager/DialogueManager.cs").new()
-		return dotnet_dialogue_manager.ThingHasMethod(thing, method)
+		return _get_dotnet_dialogue_manager().ThingHasMethod(thing, method)
 
 	return false
 
@@ -1076,7 +1156,7 @@ func resolve_thing_method(thing, method: String, args: Array):
 		return await thing.callv(method, args)
 
 	# If we get here then it's probably a C# method with a Task return type
-	var dotnet_dialogue_manager = load("res://addons/dialogue_manager/DialogueManager.cs").new()
+	var dotnet_dialogue_manager = _get_dotnet_dialogue_manager()
 	dotnet_dialogue_manager.ResolveThingMethod(thing, method, args)
 	return await dotnet_dialogue_manager.Resolved
 

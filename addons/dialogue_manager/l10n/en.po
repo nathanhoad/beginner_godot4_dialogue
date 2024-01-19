@@ -135,8 +135,20 @@ msgstr "Copy file path"
 msgid "buffer.show_in_filesystem"
 msgstr "Show in FileSystem"
 
+msgid "settings.invalid_test_scene"
+msgstr "\"{path}\" does not extend BaseDialogueTestScene."
+
 msgid "settings.revert_to_default_test_scene"
 msgstr "Revert to default test scene"
+
+msgid "settings.default_balloon_hint"
+msgstr "Custom balloon to use when calling \"DialogueManager.show_balloon()\""
+
+msgid "settings.revert_to_default_balloon"
+msgstr "Revert to default balloon"
+
+msgid "settings.default_balloon_path"
+msgstr "<example balloon>"
 
 msgid "settings.autoload"
 msgstr "Autoload"
@@ -168,8 +180,8 @@ msgstr "Skip over missing state value errors (not recommended)"
 msgid "settings.custom_test_scene"
 msgstr "Custom test scene (must extend BaseDialogueTestScene)"
 
-msgid "settings.default_csv_local"
-msgstr "Default CSV Local"
+msgid "settings.default_csv_locale"
+msgstr "Default CSV Locale"
 
 msgid "settings.states_shortcuts"
 msgstr "State Shortcuts"
@@ -179,6 +191,18 @@ msgstr "If an autoload is enabled here you can refer to its properties and metho
 
 msgid "settings.states_hint"
 msgstr "ie. Instead of \"SomeState.some_property\" you could just use \"some_property\""
+
+msgid "settings.recompile_warning"
+msgstr "Changing these settings will force a recompile of all dialogue. Only change them if you know what you are doing."
+
+msgid "settings.create_lines_for_responses_with_characters"
+msgstr "Create child dialogue line for responses with character names in them"
+
+msgid "settings.open_in_external_editor"
+msgstr "Open dialogue files in external editor"
+
+msgid "settings.external_editor_warning"
+msgstr "Note: Syntax highlighting and detailed error checking are not supported in external editors."
 
 msgid "n_of_n"
 msgstr "{index} of {total}"
@@ -231,6 +255,9 @@ msgstr "File already imported."
 msgid "errors.duplicate_import"
 msgstr "Duplicate import name."
 
+msgid "errors.unknown_using"
+msgstr "Unknown autoload in using statement."
+
 msgid "errors.empty_title"
 msgstr "Titles cannot be empty."
 
@@ -238,7 +265,7 @@ msgid "errors.duplicate_title"
 msgstr "There is already a title with that name."
 
 msgid "errors.nested_title"
-msgstr "Titles cannot be nested."
+msgstr "Titles cannot be indented."
 
 msgid "errors.invalid_title_string"
 msgstr "Titles can only contain alphanumeric characters and numbers."
@@ -416,6 +443,9 @@ msgstr "\"{method}\" is not a callable method on \"{object}\""
 
 msgid "runtime.unknown_operator"
 msgstr "Unknown operator."
+
+msgid "runtime.unknown_autoload"
+msgstr "\"{autoload}\" doesn't appear to be a valid autoload."
 
 msgid "runtime.something_went_wrong"
 msgstr "Something went wrong."

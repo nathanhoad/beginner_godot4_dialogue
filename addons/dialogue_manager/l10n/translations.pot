@@ -125,7 +125,19 @@ msgstr ""
 msgid "buffer.show_in_filesystem"
 msgstr ""
 
+msgid "settings.invalid_test_scene"
+msgstr ""
+
 msgid "settings.revert_to_default_test_scene"
+msgstr ""
+
+msgid "settings.default_balloon_hint"
+msgstr ""
+
+msgid "settings.revert_to_default_balloon"
+msgstr ""
+
+msgid "settings.default_balloon_path"
 msgstr ""
 
 msgid "settings.autoload"
@@ -158,7 +170,7 @@ msgstr ""
 msgid "settings.custom_test_scene"
 msgstr ""
 
-msgid "settings.default_csv_local"
+msgid "settings.default_csv_locale"
 msgstr ""
 
 msgid "settings.states_shortcuts"
@@ -168,6 +180,18 @@ msgid "settings.states_message"
 msgstr ""
 
 msgid "settings.states_hint"
+msgstr ""
+
+msgid "settings.recompile_warning"
+msgstr ""
+
+msgid "settings.create_lines_for_responses_with_characters"
+msgstr ""
+
+msgid "settings.open_in_external_editor"
+msgstr ""
+
+msgid "settings.external_editor_warning"
 msgstr ""
 
 msgid "n_of_n"
@@ -219,6 +243,9 @@ msgid "errors.already_imported"
 msgstr ""
 
 msgid "errors.duplicate_import"
+msgstr ""
+
+msgid "errors.unknown_using"
 msgstr ""
 
 msgid "errors.empty_title"
@@ -405,6 +432,9 @@ msgid "runtime.method_not_callable"
 msgstr ""
 
 msgid "runtime.unknown_operator"
+msgstr ""
+
+msgid "runtime.unknown_autoload"
 msgstr ""
 
 msgid "runtime.something_went_wrong"

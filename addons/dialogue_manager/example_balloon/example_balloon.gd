@@ -28,6 +28,10 @@ var dialogue_line: DialogueLine:
 			queue_free()
 			return
 
+		# If the node isn't ready yet then none of the labels will be ready yet either
+		if not is_node_ready():
+			await ready
+
 		dialogue_line = next_dialogue_line
 
 		character_label.visible = not dialogue_line.character.is_empty()
@@ -52,7 +56,7 @@ var dialogue_line: DialogueLine:
 		if dialogue_line.responses.size() > 0:
 			balloon.focus_mode = Control.FOCUS_NONE
 			responses_menu.show()
-		elif dialogue_line.time != null:
+		elif dialogue_line.time != "":
 			var time = dialogue_line.text.length() * 0.02 if dialogue_line.time == "auto" else dialogue_line.time.to_float()
 			await get_tree().create_timer(time).timeout
 			next(dialogue_line.next_id)
@@ -76,7 +80,7 @@ func _unhandled_input(_event: InputEvent) -> void:
 
 ## Start some dialogue
 func start(dialogue_resource: DialogueResource, title: String, extra_game_states: Array = []) -> void:
-	temporary_game_states = extra_game_states
+	temporary_game_states =  [self] + extra_game_states
 	is_waiting_for_input = false
 	resource = dialogue_resource
 	self.dialogue_line = await resource.get_next_dialogue_line(title, temporary_game_states)

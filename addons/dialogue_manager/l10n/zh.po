@@ -1,10 +1,15 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: Dialogue Manager\n"
-"Language: zh-cn\n"
+"POT-Creation-Date: \n"
+"PO-Revision-Date: \n"
+"Last-Translator: \n"
+"Language-Team: penghao123456、憨憨羊の宇航鸽鸽\n"
+"Language: zh\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
+"X-Generator: Poedit 3.4\n"
 
 msgid "start_a_new_file"
 msgstr "创建新文件"
@@ -158,6 +163,9 @@ msgstr "忽略全局变量缺失错误（不建议）"
 
 msgid "settings.custom_test_scene"
 msgstr "自定义测试场景（必须继承自BaseDialogueTestScene）"
+
+msgid "settings.default_csv_locale"
+msgstr "默认 CSV 区域格式"
 
 msgid "settings.states_shortcuts"
 msgstr "全局变量映射"

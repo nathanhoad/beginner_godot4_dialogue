@@ -8,8 +8,11 @@ class_name DialogueResponsesMenu extends VBoxContainer
 signal response_selected(response: DialogueResponse)
 
 
+## Optionally specify a control to duplicate for each response
+@export var response_template: Control
+
 # The list of dialogue responses.
-var _responses: Array[DialogueResponse] = []
+var _responses: Array = []
 
 
 func _ready() -> void:
@@ -18,27 +21,42 @@ func _ready() -> void:
 			get_menu_items()[0].grab_focus()
 	)
 
+	if is_instance_valid(response_template):
+		response_template.hide()
+
 
 ## Set the list of responses to show.
-func set_responses(next_responses: Array[DialogueResponse]) -> void:
+func set_responses(next_responses: Array) -> void:
 	_responses = next_responses
 
 	# Remove any current items
 	for item in get_children():
+		if item == response_template: continue
+
 		remove_child(item)
 		item.queue_free()
 
 	# Add new items
 	if _responses.size() > 0:
 		for response in _responses:
-			var item: RichTextLabel = RichTextLabel.new()
-			item.theme_type_variation = "ResponseLabel"
+			var item: Control
+			if is_instance_valid(response_template):
+				item = response_template.duplicate(DUPLICATE_GROUPS | DUPLICATE_SCRIPTS | DUPLICATE_SIGNALS)
+				item.show()
+			else:
+				item = Button.new()
 			item.name = "Response%d" % get_child_count()
-			item.fit_content = true
 			if not response.is_allowed:
 				item.name = String(item.name) + "Disallowed"
-				item.modulate.a = 0.4
-			item.text = response.text
+				item.disabled = true
+
+			# If the item has a response property then use that
+			if "response" in item:
+				item.response = response
+			# Otherwise assume we can just set the text
+			else:
+				item.text = response.text
+
 			add_child(item)
 
 		_configure_focus()
@@ -70,7 +88,7 @@ func _configure_focus() -> void:
 			item.focus_next = items[i + 1].get_path()
 
 		item.mouse_entered.connect(_on_response_mouse_entered.bind(item))
-		item.gui_input.connect(_on_response_gui_input.bind(item))
+		item.gui_input.connect(_on_response_gui_input.bind(item, i))
 
 	items[0].grab_focus()
 
@@ -79,6 +97,7 @@ func _configure_focus() -> void:
 func get_menu_items() -> Array:
 	var items: Array = []
 	for child in get_children():
+		if not child.visible: continue
 		if "Disallowed" in child.name: continue
 		items.append(child)
 
@@ -94,12 +113,12 @@ func _on_response_mouse_entered(item: Control) -> void:
 	item.grab_focus()
 
 
-func _on_response_gui_input(event: InputEvent, item: Control) -> void:
+func _on_response_gui_input(event: InputEvent, item: Control, item_index: int) -> void:
 	if "Disallowed" in item.name: return
 
 	get_viewport().set_input_as_handled()
 
 	if event is InputEventMouseButton and event.is_pressed() and event.button_index == 1:
-		response_selected.emit(_responses[item.get_index()])
+		response_selected.emit(_responses[item_index])
 	elif event.is_action_pressed("ui_accept") and item in get_menu_items():
-		response_selected.emit(_responses[item.get_index()])
+		response_selected.emit(_responses[item_index])
